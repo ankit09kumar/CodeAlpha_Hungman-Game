@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Hangman Game</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: #f9f9f9; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 2rem 1rem; }
+    .container { max-width: 560px; width: 100%; background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 2rem; }
+    h1 { text-align: center; font-size: 22px; font-weight: 500; margin-bottom: 1.5rem; }
+    svg { display: block; margin: 0 auto; }
+    .status { text-align: center; font-size: 14px; color: #666; margin: 0.75rem 0; }
+    .word { display: flex; gap: 10px; justify-content: center; margin: 1.5rem 0; flex-wrap: wrap; }
+    .letter { width: 36px; height: 44px; border-bottom: 2.5px solid #222; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 500; text-transform: uppercase; }
+    .hint { text-align: center; font-size: 12px; color: #999; margin-bottom: 0.5rem; }
+    .wrong-letters { text-align: center; font-size: 13px; color: #666; min-height: 20px; margin-bottom: 0.25rem; letter-spacing: 1px; }
+    .message { text-align: center; font-size: 18px; font-weight: 500; margin: 1rem 0; }
+    .message.win { color: #3B6D11; }
+    .message.lose { color: #A32D2D; }
+    .keyboard { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 1.5rem 0; }
+    .key { width: 36px; height: 36px; border: 1px solid #ccc; border-radius: 6px; background: #fff; font-size: 13px; font-weight: 500; cursor: pointer; }
+    .key:hover:not(:disabled) { background: #f0f0f0; }
+    .key:disabled { opacity: 0.3; cursor: default; }
+    .key.correct { background: #EAF3DE; color: #3B6D11; border-color: #97C459; }
+    .key.wrong { background: #FCEBEB; color: #A32D2D; border-color: #F09595; }
+    .play-again { display: block; margin: 1rem auto 0; padding: 8px 24px; border: 1px solid #ccc; border-radius: 6px; background: #fff; font-size: 14px; cursor: pointer; }
+    .play-again:hover { background: #f0f0f0; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Hangman</h1>
+
+  <svg width="160" height="160" viewBox="0 0 160 160" aria-hidden="true">
+    <line x1="20" y1="155" x2="140" y2="155" stroke="#999" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="50" y1="155" x2="50" y2="10"  stroke="#999" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="50" y1="10"  x2="100" y2="10" stroke="#999" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="100" y1="10" x2="100" y2="30" stroke="#999" stroke-width="2.5" stroke-linecap="round"/>
+    <circle id="hm-head" cx="100" cy="42" r="12" stroke="#222" stroke-width="2" fill="none" style="display:none"/>
+    <line id="hm-body" x1="100" y1="54"  x2="100" y2="100" stroke="#222" stroke-width="2" stroke-linecap="round" style="display:none"/>
+    <line id="hm-larm" x1="100" y1="65"  x2="78"  y2="85"  stroke="#222" stroke-width="2" stroke-linecap="round" style="display:none"/>
+    <line id="hm-rarm" x1="100" y1="65"  x2="122" y2="85"  stroke="#222" stroke-width="2" stroke-linecap="round" style="display:none"/>
+    <line id="hm-lleg" x1="100" y1="100" x2="78"  y2="125" stroke="#222" stroke-width="2" stroke-linecap="round" style="display:none"/>
+    <line id="hm-rleg" x1="100" y1="100" x2="122" y2="125" stroke="#222" stroke-width="2" stroke-linecap="round" style="display:none"/>
+  </svg>
+
+  <div class="status" id="hm-status">6 incorrect guesses remaining</div>
+  <div class="word" id="hm-word"></div>
+  <div class="hint" id="hm-hint"></div>
+  <div class="wrong-letters" id="hm-wrong"></div>
+  <div class="message" id="hm-msg"></div>
+  <div class="keyboard" id="hm-keyboard"></div>
+  <button class="play-again" id="hm-restart" style="display:none">Play again</button>
+</div>
+
+<script>
+const WORDS = [
+  { word: "python", hint: "a programming language 🐍" },
+  { word: "guitar", hint: "a stringed instrument 🎸" },
+  { word: "planet", hint: "orbits a star 🪐" },
+  { word: "jungle", hint: "a dense tropical forest 🌿" },
+  { word: "wizard", hint: "casts spells ✨" }
+];
+
+const PARTS = ["hm-head","hm-body","hm-larm","hm-rarm","hm-lleg","hm-rleg"];
+const MAX_WRONG = 6;
+
+let word, hint, guessed, wrongCount, gameOver;
+
+function pick() {
+  const w = WORDS[Math.floor(Math.random() * WORDS.length)];
+  word = w.word; hint = w.hint;
+  guessed = new Set();
+  wrongCount = 0;
+  gameOver = false;
+  render();
+}
+
+function render() {
+  PARTS.forEach((id, i) => {
+    document.getElementById(id).style.display = i < wrongCount ? "" : "none";
+  });
+
+  const remaining = MAX_WRONG - wrongCount;
+  document.getElementById("hm-status").textContent =
+    remaining === 1 ? "1 incorrect guess remaining" : `${remaining} incorrect guesses remaining`;
+
+  const wordEl = document.getElementById("hm-word");
+  wordEl.innerHTML = word.split("").map(ch =>
+    `<div class="letter">${guessed.has(ch) ? ch : ""}</div>`
+  ).join("");
+
+  document.getElementById("hm-hint").textContent = "Hint: " + hint;
+
+  const wrong = [...guessed].filter(c => !word.includes(c));
+  document.getElementById("hm-wrong").textContent =
+    wrong.length ? "Wrong: " + wrong.join("  ") : "";
+
+  const msgEl = document.getElementById("hm-msg");
+  const restartBtn = document.getElementById("hm-restart");
+
+  const won = word.split("").every(c => guessed.has(c));
+  const lost = wrongCount >= MAX_WRONG;
+
+  if (won) {
+    msgEl.textContent = "You got it! 🎉";
+    msgEl.className = "message win";
+    restartBtn.style.display = "";
+    gameOver = true;
+  } else if (lost) {
+    msgEl.textContent = `Game over — the word was "${word}"`;
+    msgEl.className = "message lose";
+    restartBtn.style.display = "";
+    gameOver = true;
+    word.split("").forEach((c, i) => {
+      wordEl.children[i].textContent = c;
+    });
+  } else {
+    msgEl.textContent = "";
+    msgEl.className = "message";
+    restartBtn.style.display = "none";
+  }
+
+  const kbEl = document.getElementById("hm-keyboard");
+  kbEl.innerHTML = "";
+  for (let i = 0; i < 26; i++) {
+    const ch = String.fromCharCode(97 + i);
+    const btn = document.createElement("button");
+    btn.className = "key";
+    btn.textContent = ch;
+    if (guessed.has(ch)) {
+      btn.disabled = true;
+      btn.classList.add(word.includes(ch) ? "correct" : "wrong");
+    } else if (gameOver) {
+      btn.disabled = true;
+    } else {
+      btn.addEventListener("click", () => guess(ch));
+    }
+    kbEl.appendChild(btn);
+  }
+}
+
+function guess(ch) {
+  if (gameOver || guessed.has(ch)) return;
+  guessed.add(ch);
+  if (!word.includes(ch)) wrongCount++;
+  render();
+}
+
+document.addEventListener("keydown", e => {
+  const ch = e.key.toLowerCase();
+  if (/^[a-z]$/.test(ch) && !gameOver && !guessed.has(ch)) guess(ch);
+});
+
+document.getElementById("hm-restart").addEventListener("click", pick);
+pick();
+</script>
+</body>
+</html>
